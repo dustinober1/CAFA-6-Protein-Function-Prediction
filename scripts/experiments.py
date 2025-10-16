@@ -5,11 +5,15 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import argparse
+import sys
 
-from data_loader import CAFADataLoader
-from feature_extractor import ProteinFeatureExtractor
-from baseline_models import RandomForestModel
-from evaluation import ModelEvaluator, AnalysisUtils
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from data.data_loader import CAFADataLoader
+from features.feature_extractor import ProteinFeatureExtractor
+from models.baseline_models import RandomForestModel
+from evaluation.evaluation import ModelEvaluator, AnalysisUtils
 import time
 
 

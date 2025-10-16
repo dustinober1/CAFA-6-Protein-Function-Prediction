@@ -1,6 +1,65 @@
+# Data directories
 cafa-6-protein-function-prediction/
 contest-info/
+
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
 .venv/
-docs/processed_data.pkl
-.cache/processed_data.pkl
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Cache and temp files
+.cache/
+*.pkl
+*.pickle
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Results and outputs
+results/
+*.tsv
+*.csv
+output/
+
+# Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Model checkpoints
+checkpoints/
+*.pth
+*.pt
+
+# Logs
+*.log

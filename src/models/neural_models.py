@@ -351,7 +351,7 @@ def main():
     model.train(
         train_dataset, val_dataset,
         top_terms,
-        epochs=5,
+        epochs=50,
         batch_size=16,
         learning_rate=0.001,
         verbose=True

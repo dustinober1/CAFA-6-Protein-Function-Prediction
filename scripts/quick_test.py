@@ -2,9 +2,15 @@
 Quick baseline model test with smaller dataset.
 """
 import numpy as np
-from data_loader import CAFADataLoader
-from feature_extractor import ProteinFeatureExtractor
-from baseline_models import SVMModel, RandomForestModel
+import sys
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from data.data_loader import CAFADataLoader
+from features.feature_extractor import ProteinFeatureExtractor
+from models.baseline_models import SVMModel, RandomForestModel
 
 
 def main():

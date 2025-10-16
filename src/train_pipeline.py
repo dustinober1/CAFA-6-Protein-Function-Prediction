@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 import time
 
-from .data.data_loader import CAFADataLoader
-from .features.feature_extractor import ProteinFeatureExtractor
-from .models.baseline_models import SVMModel, RandomForestModel
-from .models.neural_models import NeuralNetworkModel, DeepNeuralNetwork, ProteinDataset
-from .models.embedding_model import SequenceEncoder, SequenceToFunctionModel
-from .evaluation.evaluation import ModelEvaluator, EnsemblePredictor, SubmissionGenerator, AnalysisUtils
+from data.data_loader import CAFADataLoader
+from features.feature_extractor import ProteinFeatureExtractor
+from models.baseline_models import SVMModel, RandomForestModel
+from models.neural_models import NeuralNetworkModel, DeepNeuralNetwork, ProteinDataset
+from models.embedding_model import SequenceEncoder, SequenceToFunctionModel
+from evaluation.evaluation import ModelEvaluator, EnsemblePredictor, SubmissionGenerator, AnalysisUtils
 import torch
 from torch.utils.data import DataLoader
 
