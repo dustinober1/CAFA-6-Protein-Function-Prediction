@@ -51,9 +51,19 @@ class CAFADataLoader:
                     
                     # Parse header - extract protein ID (first part after >)
                     header = line[1:]  # Remove '>'
-                    parts = header.split('|')
-                    # Format: sp|ProteinID|GeneName...
-                    current_id = parts[1] if len(parts) > 1 else parts[0]
+                    
+                    # Handle different formats:
+                    # Train: sp|ProteinID|GeneName...
+                    # Test: ProteinID TaxonID
+                    if '|' in header:
+                        # Format: sp|ProteinID|GeneName...
+                        parts = header.split('|')
+                        current_id = parts[1] if len(parts) > 1 else parts[0]
+                    else:
+                        # Format: ProteinID TaxonID (test sequences)
+                        # Extract just the protein ID before the space
+                        current_id = header.split()[0]
+                    
                     current_seq = []
                 else:
                     current_seq.append(line)

@@ -10,6 +10,7 @@ import time
 
 from data.data_loader import CAFADataLoader
 from features.feature_extractor import ProteinFeatureExtractor
+from features.go_ontology import GOHierarchy
 from models.baseline_models import SVMModel, RandomForestModel
 from models.neural_models import NeuralNetworkModel, DeepNeuralNetwork, ProteinDataset
 from models.embedding_model import SequenceEncoder, SequenceToFunctionModel
@@ -35,6 +36,7 @@ class ComprehensiveTrainingPipeline:
         
         self.loader = None
         self.evaluator = None
+        self.go_hierarchy = None
         self.models = {}
         self.predictions = {}
         
@@ -45,6 +47,11 @@ class ComprehensiveTrainingPipeline:
         self.loader.load_train_data()
         self.loader.load_test_data()
         self.loader.load_ia_weights()
+        
+        # Load GO hierarchy for term propagation
+        print("Loading GO hierarchy...")
+        go_obo_path = self.data_dir / 'Train' / 'go-basic.obo'
+        self.go_hierarchy = GOHierarchy(str(go_obo_path))
         
         self.evaluator = ModelEvaluator(self.loader.ia_weights)
         
@@ -303,27 +310,38 @@ class ComprehensiveTrainingPipeline:
         print("GENERATING TEST PREDICTIONS")
         print("="*80)
         
-        # Extract features for test data
+        # Extract features for ALL test data
         print("Extracting features for test data...")
-        test_seqs = {pid: self.loader.test_sequences[pid] 
-                    for pid in list(self.loader.test_sequences.keys())[:1000]}  # Sample for quick test
+        print(f"Total test sequences: {len(self.loader.test_sequences)}")
+        
+        # Use all test sequences
+        test_seqs = self.loader.test_sequences
         
         X_test, test_ids = self.extractor.create_combined_features(test_seqs, fit_tfidf=False)
         
         print(f"Test feature shape: {X_test.shape}")
+        print(f"Number of test proteins: {len(test_ids)}")
         
         # Get predictions from best model (ensemble)
         print("Making predictions...")
-        pred_arrays = list(self.predictions.values())
-        ensemble_proba = EnsemblePredictor.average_ensemble(pred_arrays)
         
-        # Predict on test set (use first baseline model as example)
+        # Predict on test set using the best model
         if self.models:
+            # Use the first model (Random Forest is typically best)
             first_model = list(self.models.values())[0]
             test_pred_proba = first_model.predict_proba(X_test)
+            print(f"Generated predictions with shape: {test_pred_proba.shape}")
         else:
-            # Random predictions as fallback
-            test_pred_proba = np.random.uniform(0, 1, size=(X_test.shape[0], len(self.go_terms)))
+            # Fallback: use term frequency-based predictions
+            print("No trained models found, using frequency-based predictions")
+            test_pred_proba = np.zeros((X_test.shape[0], len(self.go_terms)))
+            
+            # Calculate term frequencies from training data
+            term_freq = np.mean(self.y_train, axis=0)
+            
+            # Assign frequency-based scores to all test proteins
+            for i in range(test_pred_proba.shape[0]):
+                test_pred_proba[i] = term_freq
         
         # Convert to submission format
         predictions = {}
@@ -331,26 +349,37 @@ class ComprehensiveTrainingPipeline:
             go_preds = {}
             for j, go_term in enumerate(self.go_terms):
                 score = float(test_pred_proba[i, j])
-                if score > 0:
+                # Only include predictions with meaningful scores
+                if score > 0.001:  # Minimum threshold
                     go_preds[go_term] = score
+            
+            # Ensure every protein has at least some predictions
+            if not go_preds:
+                # Add top 10 most frequent terms with small scores
+                term_freq = np.mean(self.y_train, axis=0)
+                top_terms = np.argsort(term_freq)[-10:]
+                for j in top_terms:
+                    go_preds[self.go_terms[j]] = 0.01
+            
             predictions[protein_id] = go_preds
         
+        print(f"Generated predictions for {len(predictions)} proteins")
         return predictions
     
     def create_submission(self, predictions: Dict, output_file: str = None):
-        """Create submission file."""
+        """Create submission file with GO hierarchy propagation."""
         if output_file is None:
             output_file = str(self.output_dir / 'submission.tsv')
         
         print(f"\nCreating submission file: {output_file}")
-        gen = SubmissionGenerator(self.loader.ia_weights)
-        gen.create_submission(predictions, output_file)
+        gen = SubmissionGenerator(self.loader.ia_weights, self.go_hierarchy)
+        gen.create_submission(predictions, output_file, propagate=True)
         
         return output_file
     
-    def run_full_pipeline(self, train_size: int = 1000, val_size: int = 300, 
-                         n_terms: int = 150):
-        """Run complete pipeline."""
+    def run_full_pipeline(self, train_size: int = 2000, val_size: int = 500, 
+                         n_terms: int = 500):
+        """Run complete pipeline with improved parameters."""
         self.load_data()
         self.prepare_data_split(train_size, val_size, n_terms)
         
@@ -372,7 +401,7 @@ class ComprehensiveTrainingPipeline:
 
 
 def main():
-    """Run complete pipeline."""
+    """Run complete pipeline with improved parameters."""
     import sys
     
     data_dir = '/Users/dustinober/Kaggle/CAFA-6-Protein-Function-Prediction/cafa-6-protein-function-prediction'
@@ -381,7 +410,8 @@ def main():
     pipeline = ComprehensiveTrainingPipeline(data_dir, output_dir)
     
     try:
-        pipeline.run_full_pipeline(train_size=1000, val_size=300, n_terms=100)
+        # Use more training data and GO terms for better coverage
+        pipeline.run_full_pipeline(train_size=2000, val_size=500, n_terms=500)
     except KeyboardInterrupt:
         print("\nPipeline interrupted by user")
         sys.exit(1)

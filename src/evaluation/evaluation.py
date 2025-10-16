@@ -11,17 +11,54 @@ from collections import defaultdict
 class SubmissionGenerator:
     """Generate submission files in the required format."""
     
-    def __init__(self, ia_weights: Dict[str, float]):
+    def __init__(self, ia_weights: Dict[str, float], go_hierarchy=None):
         """
         Initialize generator.
         
         Args:
             ia_weights: Dictionary of GO term -> information accretion weight
+            go_hierarchy: Optional GOHierarchy object for term propagation
         """
         self.ia_weights = ia_weights
+        self.go_hierarchy = go_hierarchy
+    
+    def propagate_predictions(self, predictions: Dict[str, float]) -> Dict[str, float]:
+        """
+        Propagate predictions to ancestors in GO hierarchy.
+        If a term is predicted, all its ancestors should also be predicted
+        with at least the child's score (max score propagation).
+        
+        Args:
+            predictions: Dict of go_term -> probability for a single protein
+            
+        Returns:
+            Propagated predictions dict
+        """
+        if not self.go_hierarchy:
+            return predictions
+        
+        propagated = predictions.copy()
+        
+        # For each predicted term, propagate to ancestors
+        for term, score in predictions.items():
+            if term not in self.go_hierarchy.terms:
+                continue
+                
+            # Get all ancestors
+            ancestors = self.go_hierarchy.get_ancestors(term, include_self=False)
+            
+            # Propagate score to ancestors (take max if ancestor already has a score)
+            for ancestor in ancestors:
+                if ancestor in propagated:
+                    propagated[ancestor] = max(propagated[ancestor], score)
+                else:
+                    propagated[ancestor] = score
+        
+        return propagated
     
     def create_submission(self, predictions: Dict[str, Dict[str, float]], 
-                         output_path: str, max_predictions_per_protein: int = 1500):
+                         output_path: str, max_predictions_per_protein: int = 1500,
+                         propagate: bool = True):
         """
         Create submission file in the required format.
         
@@ -29,12 +66,32 @@ class SubmissionGenerator:
             predictions: Dict of protein_id -> {go_term: probability}
             output_path: Path to save submission file
             max_predictions_per_protein: Max predictions per protein
+            propagate: Whether to propagate predictions to ancestor terms
         """
         lines = []
         
         for protein_id, go_predictions in predictions.items():
-            # Extract just the protein ID if it contains taxon info (format: ID\t9606 from sequences)
-            prot_id = protein_id.split('\t')[0] if '\t' in protein_id else protein_id
+            # Clean protein ID - remove any taxon info, spaces, or other artifacts
+            # Handle formats: "ID\t9606", "ID 9606", "ID|stuff", or just "ID"
+            prot_id = protein_id.strip()
+            
+            # Remove tab-separated taxon IDs
+            if '\t' in prot_id:
+                prot_id = prot_id.split('\t')[0]
+            
+            # Remove space-separated taxon IDs  
+            if ' ' in prot_id:
+                prot_id = prot_id.split()[0]
+            
+            # Remove any pipe-separated parts (shouldn't happen but be safe)
+            if '|' in prot_id:
+                parts = prot_id.split('|')
+                # If it looks like "sp|ID|name", take middle part
+                prot_id = parts[1] if len(parts) > 1 else parts[0]
+            
+            # Propagate predictions to ancestors if enabled
+            if propagate and self.go_hierarchy:
+                go_predictions = self.propagate_predictions(go_predictions)
             
             # Sort by probability (descending)
             sorted_preds = sorted(go_predictions.items(), key=lambda x: x[1], reverse=True)
@@ -57,6 +114,7 @@ class SubmissionGenerator:
         
         print(f"Submission file created: {output_path}")
         print(f"  Total predictions: {len(lines)}")
+        print(f"  Total proteins: {len(predictions)}")
     
     @staticmethod
     def calculate_weighted_f1(y_true: np.ndarray, y_pred: np.ndarray, 
