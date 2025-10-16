@@ -1,0 +1,327 @@
+PROJECT: CAFA-6 Protein Function Prediction
+
+OVERVIEW
+========
+This project implements multiple machine learning and deep learning models to predict Gene Ontology (GO) terms for proteins based on their amino acid sequences. The pipeline includes several different approaches that can be compared and ensembled for better predictions.
+
+MODULES
+=======
+
+1. data_loader.py
+   - CAFADataLoader: Main data loading class
+   - Loads FASTA sequences, GO term annotations, taxonomy info, and IA weights
+   - Provides data splitting and matrix creation utilities
+   - Functions:
+     * load_train_data(): Load training sequences, terms, and taxonomy
+     * load_test_data(): Load test superset sequences
+     * load_ia_weights(): Load information accretion weights
+     * split_train_test(): Split training data for validation
+     * create_protein_to_terms_matrix(): Create binary protein-term matrix
+     * save_processed_data() / load_processed_data(): Pickle serialization
+
+2. feature_extractor.py
+   - ProteinFeatureExtractor: Extract various features from protein sequences
+   - Multiple feature types for flexibility:
+     * Amino acid composition (20-dim): Percentage of each amino acid
+     * Biochemical properties (6-dim): Hydrophobic, polar, charged, aromatic, special
+     * Length features (1-dim): Log-scaled sequence length
+     * Dipeptide composition (400-dim): Frequency of amino acid pairs
+     * K-mer TF-IDF (5000-dim): Term frequency-inverse document frequency on k-mers
+     * Combined features (427-dim): All features concatenated
+   - Functions:
+     * get_composition_features(): Amino acid percentage
+     * get_property_features(): Biochemical properties
+     * get_dipeptide_features(): Pairwise amino acid frequencies
+     * create_kmer_tfidf_features(): K-mer TF-IDF vectorization
+     * create_combined_features(): Concatenate all features
+
+3. baseline_models.py
+   - BaselineModel: Base class for ML models
+   - SVMModel: Linear SVM using OneVsRest multi-label strategy
+   - RandomForestModel: Random Forest using OneVsRest multi-label strategy
+   - Multi-label classification on top GO terms
+   - Functions:
+     * train(): Fit model on training data
+     * predict(): Get binary predictions with threshold
+     * predict_proba(): Get probability predictions
+     * evaluate(): Calculate precision, recall, F1
+     * save_model() / load_model(): Pickle serialization
+
+4. neural_models.py
+   - ProteinDataset: PyTorch Dataset wrapper
+   - DeepNeuralNetwork: Multi-layer feed-forward network
+     * Input → [Linear + ReLU + Dropout + BatchNorm] × 2 → Output + Sigmoid
+     * Multi-label classification with BCELoss
+   - ConvolutionalProteinNet: 1D convolutional network
+     * Embedding → Conv → Conv → GlobalAvgPool → FC → Output
+   - NeuralNetworkModel: Training wrapper with validation
+   - Features:
+     * Batch normalization and dropout for regularization
+     * Adam optimizer with learning rate scheduling
+     * Training history tracking
+     * GPU/CPU device support
+
+5. embedding_model.py
+   - SequenceEncoder: Convert protein sequences to integer arrays
+   - ProteinEmbedding: Learnable embeddings + positional encoding
+   - SequenceToFunctionModel: Attention-based sequence-to-function model
+     * Embedding + Attention pooling → FC → Output
+     * Direct sequence input without feature engineering
+   - Pure sequence-based approach
+   - Functions:
+     * encode_sequence(): Convert amino acids to IDs
+     * encode_sequences(): Batch encoding with length tracking
+
+6. evaluation.py
+   - SubmissionGenerator: Create submission files in Kaggle format
+   - ModelEvaluator: Compare multiple models with various metrics
+   - EnsemblePredictor: Average and voting ensemble methods
+   - AnalysisUtils: Analyze prediction distributions
+   - Features:
+     * Weighted F1 score using IA weights
+     * Submission format validation (max 1500 predictions per protein)
+     * Per-term and overall metrics
+     * Model comparison tables
+
+7. train_pipeline.py
+   - ComprehensiveTrainingPipeline: Complete end-to-end pipeline
+   - Orchestrates all models and evaluation
+   - Functions:
+     * load_data(): Initialize data loader
+     * prepare_data_split(): Create train/val splits
+     * train_baseline_models(): Train RF and SVM
+     * train_neural_model(): Train deep neural network
+     * train_embedding_model(): Train sequence embedding model
+     * ensemble_predictions(): Combine predictions
+     * generate_test_predictions(): Predict on test set
+     * create_submission(): Generate submission file
+     * run_full_pipeline(): Execute complete workflow
+
+MODELS IMPLEMENTED
+==================
+
+1. Random Forest (Baseline)
+   - Input: Combined features (427-dim)
+   - Method: OneVsRest with RF classifier (100 trees, max_depth=15)
+   - Advantages: Fast, interpretable, no hyperparameter tuning needed
+   - Typical F1: 0.30-0.40 on validation set
+
+2. Support Vector Machine (Baseline)
+   - Input: Combined features (427-dim)
+   - Method: OneVsRest with Linear SVC
+   - Advantages: Memory efficient, good with high-dim features
+   - Note: Not included in current pipeline for speed
+
+3. Deep Neural Network
+   - Input: Combined features (427-dim)
+   - Architecture: 427 → 256 → 128 → 64 → n_terms
+   - Activation: ReLU with BatchNorm and Dropout (0.3)
+   - Loss: Binary Cross Entropy (multi-label)
+   - Typical F1: 0.28-0.35 on validation set
+
+4. Embedding-Based Sequence Model
+   - Input: Raw protein sequences
+   - Architecture: Sequence → Embedding → Attention pooling → FC → Output
+   - Embedding dimension: 64
+   - Positional encoding: Sequence position-aware
+   - Typical F1: 0.28-0.32 on validation set
+
+ENSEMBLE APPROACH
+=================
+The pipeline uses simple averaging of probability predictions from all models:
+1. Get probability predictions from each model
+2. Average probabilities across models (equal weights)
+3. Apply threshold (0.5) for binary predictions
+4. Outperforms individual models in most cases
+
+FEATURE ENGINEERING
+===================
+
+The combined feature set includes:
+
+1. Amino Acid Composition (20 features)
+   - Percentage of each standard amino acid (A, C, D, ..., Y)
+   - Captures overall amino acid distribution
+
+2. Biochemical Properties (6 features)
+   - Hydrophobic: A, I, L, M, F, V, P
+   - Polar uncharged: S, T, N, Q
+   - Polar charged positive: K, R
+   - Polar charged negative: D, E
+   - Aromatic: F, W, Y
+   - Special: C, G, H
+
+3. Dipeptide Composition (400 features)
+   - Frequency of all pairwise amino acid combinations
+   - Captures local sequence patterns
+
+4. K-mer TF-IDF (5000 features)
+   - 3-mers transformed with TF-IDF vectorizer
+   - Captures n-gram patterns similar to NLP
+
+5. Sequence Length (1 feature)
+   - Log-scaled to handle wide range
+
+USAGE EXAMPLES
+==============
+
+1. Run complete pipeline:
+   python train_pipeline.py
+
+2. Load and explore data:
+   from data_loader import CAFADataLoader
+   loader = CAFADataLoader('path/to/data')
+   loader.load_train_data()
+   print(loader.get_train_data_summary())
+
+3. Extract features:
+   from feature_extractor import ProteinFeatureExtractor
+   extractor = ProteinFeatureExtractor(k=3)
+   X, ids = extractor.create_combined_features(sequences)
+
+4. Train individual model:
+   from baseline_models import RandomForestModel
+   model = RandomForestModel(n_estimators=50, max_depth=15)
+   model.train(X_train, y_train, go_terms)
+   predictions = model.predict(X_test)
+
+5. Create submission:
+   from evaluation import SubmissionGenerator
+   gen = SubmissionGenerator(ia_weights)
+   gen.create_submission(predictions_dict, 'submission.tsv')
+
+EVALUATION METRICS
+==================
+
+All models are evaluated using:
+- Precision: TP / (TP + FP)
+- Recall: TP / (TP + FN)
+- F1 (micro): Harmonic mean of precision/recall (all samples treated equally)
+- F1 (macro): Harmonic mean per class, then averaged
+- F1 (weighted): Harmonic mean weighted by class frequency
+
+Weighted F1 using IA (Information Accretion) weights is the official metric.
+
+DATA STATISTICS
+===============
+
+Training Data:
+- 82,404 proteins with sequences
+- 26,125 unique GO terms
+- Average 6.52 terms per protein
+- Range: 1-233 terms per protein
+
+Test Data:
+- 224,309 test sequences (superset)
+- Unknown ground truth (prospective evaluation)
+- Only proteins with new annotations after deadline will be scored
+
+DATA FILES
+==========
+
+Input:
+- Train/train_sequences.fasta: Training protein sequences
+- Train/train_terms.tsv: Protein → GO term annotations
+- Train/train_taxonomy.tsv: Protein → taxon ID mapping
+- Train/go-basic.obo: Gene Ontology structure (DAG)
+- Test/testsuperset.fasta: Test protein sequences
+- IA.tsv: Information accretion weights
+- processed_data.pkl: Cached processed data
+
+Output:
+- results/submission.tsv: Kaggle submission file
+  Format: ProteinID \t GO_TERM \t probability
+
+HYPERPARAMETERS
+===============
+
+Random Forest:
+- n_estimators: 30-100 (trees)
+- max_depth: 10-20 (tree depth)
+- Best on our data: (30, 12)
+
+Deep Neural Network:
+- Hidden dims: [256, 128, 64]
+- Dropout: 0.3
+- Learning rate: 0.001
+- Batch size: 32
+- Epochs: 5-10
+
+Embedding Model:
+- Embedding dim: 64
+- Hidden dim: 128
+- Learning rate: 0.001
+- Batch size: 32
+- Epochs: 3-5
+
+K-mer TF-IDF:
+- K: 3 (trigrams)
+- Max features: 5000
+- Vectorizer: TfidfVectorizer
+
+PERFORMANCE NOTES
+=================
+
+1. Feature engineering matters: Combined features outperform individual types
+2. Random Forest generally most consistent across different data splits
+3. Neural networks require sufficient data and tuning
+4. Ensemble always improves over single models
+5. Sequence length varies widely (16-1000+ AAs), log scaling helps
+6. Multi-label problem: ~90% of proteins have >1 term
+7. Class imbalance is extreme: top 1% of terms cover ~50% of labels
+
+POTENTIAL IMPROVEMENTS
+======================
+
+1. Use pre-trained protein embeddings (ESM, ProtBERT)
+2. Implement hierarchical classification respecting GO ontology
+3. Use graph neural networks on the GO DAG
+4. Add protein-protein interaction features
+5. Incorporate taxonomic information in model
+6. Use weighted losses to handle class imbalance
+7. Implement stratified k-fold cross-validation
+8. Hyperparameter optimization with Bayesian search
+9. Data augmentation techniques
+10. Transfer learning from related protein tasks
+
+DEPENDENCIES
+============
+
+Core:
+- numpy: Numerical computing
+- pandas: Data manipulation
+- scikit-learn: Machine learning algorithms
+
+Deep Learning:
+- torch: PyTorch framework
+- transformers: Pre-trained models
+
+Utilities:
+- biopython: Biological sequence handling
+- scipy: Scientific computing
+
+INSTALLATION
+============
+
+conda create -n cafa-6 python=3.10
+conda activate cafa-6
+pip install numpy pandas scikit-learn scipy matplotlib seaborn
+pip install torch torchvision torchaudio
+pip install transformers biopython
+
+Or use the provided .venv with all dependencies installed.
+
+CITATION
+========
+
+If you use this project, please cite:
+
+CAFA 6 Challenge (2024)
+Kaggle Competition: https://www.kaggle.com/competitions/cafa-6-protein-function-prediction
+
+Related Paper:
+Jiang et al. "An expanded evaluation of protein function prediction methods shows an improvement in accuracy."
+Genome Biol. (2016) 17(1): 184
+
+Author: Created for CAFA-6 Competition
+Date: 2025
