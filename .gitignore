@@ -2,3 +2,4 @@ cafa-6-protein-function-prediction/
 contest-info/
 __pycache__/
 .venv/
+docs/processed_data.pkl
