@@ -1,6 +1,7 @@
 # Data directories
 cafa-6-protein-function-prediction/
 contest-info/
+results/
 
 # Python
 __pycache__/
