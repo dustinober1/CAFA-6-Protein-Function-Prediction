@@ -3,3 +3,4 @@ contest-info/
 __pycache__/
 .venv/
 docs/processed_data.pkl
+.cache/processed_data.pkl
