@@ -64,3 +64,11 @@ checkpoints/
 
 # Logs
 *.log
+
+# Large data files
+*.fasta
+*.obo
+*.zip
+Test/
+Train/
+cafa-6-protein-function-prediction.zip
